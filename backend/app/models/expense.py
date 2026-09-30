@@ -18,3 +18,7 @@ class ExpenseOut(BaseModel):
     category: str
     description: str
     txn_date: date
+
+
+class ExpenseImport(BaseModel):
+    transactions: list[ExpenseCreate] = Field(min_length=1, max_length=2000)

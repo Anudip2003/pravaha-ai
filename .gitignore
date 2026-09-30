@@ -21,6 +21,12 @@ build/
 # Logs
 *.log
 
+# Local archives
+*.zip
+
 # OS
 .DS_Store
 Thumbs.db
+
+__pycache__/
+*.pyc

@@ -27,3 +27,6 @@ Open http://localhost:5173
 2. SQL Editor → paste supabase_schema.sql → Run
 3. Authentication → Providers → Email → turn OFF "Confirm email"
 4. Settings → API Keys → copy service_role key → paste in backend/.env
+
+### Cash-flow planning
+Run `backend/supabase_finance_settings.sql` once in the Supabase SQL Editor to save monthly income, category budgets, and confirmed recurring expenses per user.

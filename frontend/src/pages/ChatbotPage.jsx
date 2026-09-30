@@ -1,25 +1,9 @@
 // src/pages/ChatbotPage.jsx
 import { useState, useRef, useEffect } from "react";
 import { Send, Bot, User } from "lucide-react";
+import { apiChat } from "../api/client";
 
 const ACCENT = "#C9A24B";
-
-const SYSTEM_PROMPT = `You are Pravaha's AI finance advisor — a knowledgeable, friendly guide for personal finance in India.
-
-You help users with:
-- Understanding their spending patterns
-- Budgeting strategies (50/30/20 rule, zero-based budgeting)
-- Investment basics (mutual funds, SIP, FD, PPF, NPS, stocks, gold)
-- Tax-saving instruments (ELSS, 80C deductions)
-- Emergency fund planning
-- General financial literacy
-
-Rules:
-- Always give practical, India-specific advice (mention INR, Indian instruments, SEBI, RBI where relevant)
-- Never recommend specific stocks to buy/sell — stick to fund categories and asset classes
-- Always clarify you're providing educational guidance, not licensed financial advice
-- Be concise and clear — avoid jargon unless you explain it
-- If user mentions their salary/expenses, use those numbers in your advice`;
 
 export default function ChatbotPage() {
   const [messages, setMessages] = useState([
@@ -46,20 +30,13 @@ export default function ChatbotPage() {
     setLoading(true);
 
     try {
-      const response = await fetch("http://localhost:8000/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          messages: newMessages.map(m => ({ role: m.role, content: m.content }))
-        }),
-      });
-      const data = await response.json();
+      const data = await apiChat(newMessages.map(m => ({ role: m.role, content: m.content })));
       const reply = data.reply || "Sorry, I couldn't get a response.";
       setMessages(prev => [...prev, { role: "assistant", content: reply }]);
     } catch (err) {
       setMessages(prev => [...prev, {
         role: "assistant",
-        content: "Something went wrong. Please try again.",
+        content: err.message || "Something went wrong. Please try again.",
       }]);
     } finally {
       setLoading(false);
@@ -74,7 +51,7 @@ export default function ChatbotPage() {
     <div className="flex flex-col h-[calc(100vh-6rem)]">
       <div className="mb-4">
         <h1 className="text-2xl font-serif text-white mb-1">AI Finance Advisor</h1>
-        <p className="text-white/40 text-sm">Ask anything about budgeting, investing, or saving money in India.</p>
+        <p className="text-white/40 text-sm">Ask about your tracked spending, budgeting, or investing.</p>
       </div>
 
       {/* Messages */}
@@ -122,6 +99,8 @@ export default function ChatbotPage() {
       {messages.length === 1 && (
         <div className="flex flex-wrap gap-2 mb-3">
           {[
+            "Summarize my spending this month",
+            "Which categories are costing me the most?",
             "How should I start investing with ₹10,000/month?",
             "Explain SIP vs lump sum investing",
             "What is the 50/30/20 budgeting rule?",

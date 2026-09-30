@@ -5,6 +5,7 @@ import AuthPage from "./pages/AuthPage";
 import DashboardPage from "./pages/DashboardPage";
 import InvestmentPage from "./pages/InvestmentPage";
 import ChatbotPage from "./pages/ChatbotPage";
+import CashFlowPage from "./pages/CashFlowPage";
 import Sidebar from "./components/Sidebar";
 
 function AppShell() {
@@ -26,6 +27,7 @@ function AppShell() {
       <Sidebar active={active} setActive={setActive} />
       <main className="flex-1 p-8 overflow-y-auto">
         {active === "dashboard"  && <DashboardPage />}
+        {active === "cashflow"   && <CashFlowPage />}
         {active === "investment" && <InvestmentPage />}
         {active === "chatbot"    && <ChatbotPage />}
       </main>

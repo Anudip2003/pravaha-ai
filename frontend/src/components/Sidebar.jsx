@@ -1,5 +1,5 @@
 // src/components/Sidebar.jsx
-import { LayoutGrid, TrendingUp, MessageCircle, LogOut, Wallet } from "lucide-react";
+import { LayoutGrid, TrendingUp, MessageCircle, LogOut, Wallet, BarChart3 } from "lucide-react";
 import { useAuth } from "../hooks/useAuth.jsx";
 
 const ACCENT = "#C9A24B";
@@ -7,6 +7,7 @@ const INK = "#0E1525";
 
 const NAV = [
   { id: "dashboard",  label: "Dashboard",  icon: LayoutGrid },
+  { id: "cashflow",   label: "Cash Flow",   icon: BarChart3 },
   { id: "investment", label: "Investment",  icon: TrendingUp },
   { id: "chatbot",    label: "AI Advisor",  icon: MessageCircle },
 ];

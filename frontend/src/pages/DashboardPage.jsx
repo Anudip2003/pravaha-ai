@@ -4,6 +4,7 @@ import { PlusCircle, Trash2, TrendingDown, Wallet, Tag } from "lucide-react";
 import { PieChart, Pie, Cell, Tooltip, BarChart, Bar, XAxis, YAxis, ResponsiveContainer } from "recharts";
 import { apiGetExpenses, apiAddExpense, apiDeleteExpense } from "../api/client";
 import { classifyExpense, ALL_CATEGORIES } from "../api/classifier";
+import StatementImport from "../components/StatementImport";
 
 const ACCENT = "#C9A24B";
 const COLORS = ["#C9A24B","#4B8EC9","#4BC975","#C94B7A","#9B4BC9","#C9784B","#4BC9C2","#C9C24B","#4B54C9","#8DC94B","#C94B4B"];
@@ -92,6 +93,8 @@ function AddExpenseForm({ onAdd }) {
 export default function DashboardPage() {
   const [expenses, setExpenses] = useState([]);
   const [loading, setLoading] = useState(true);
+  const currentMonth = new Date().toISOString().slice(0, 7);
+  const [selectedMonth, setSelectedMonth] = useState(currentMonth);
 
   const fetchExpenses = useCallback(async () => {
     try {
@@ -110,6 +113,10 @@ export default function DashboardPage() {
     setExpenses(prev => [newExpense, ...prev]);
   }
 
+  function handleImport(importedExpenses) {
+    setExpenses(prev => [...importedExpenses, ...prev].sort((a, b) => b.txn_date.localeCompare(a.txn_date)));
+  }
+
   async function handleDelete(id) {
     try {
       await apiDeleteExpense(id);
@@ -118,10 +125,16 @@ export default function DashboardPage() {
   }
 
   // ── Stats ──────────────────────────────────────────────────────────────────
-  const thisMonth = new Date().toISOString().slice(0, 7);
-  const monthExpenses = expenses.filter(e => e.txn_date?.startsWith(thisMonth));
-  const totalThisMonth = monthExpenses.reduce((s, e) => s + Number(e.amount), 0);
+  const monthOptions = [...new Set([currentMonth, ...expenses.map(e => e.txn_date?.slice(0, 7)).filter(Boolean)])]
+    .sort()
+    .reverse();
+  const monthExpenses = expenses.filter(e => e.txn_date?.startsWith(selectedMonth));
+  const totalSelectedMonth = monthExpenses.reduce((s, e) => s + Number(e.amount), 0);
   const totalAll = expenses.reduce((s, e) => s + Number(e.amount), 0);
+  const selectedMonthLabel = new Date(`${selectedMonth}-01T00:00:00`).toLocaleDateString("en-IN", {
+    month: "long",
+    year: "numeric",
+  });
 
   // Category breakdown for pie chart
   const categoryMap = {};
@@ -145,14 +158,31 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-serif text-white mb-1">Dashboard</h1>
-        <p className="text-white/40 text-sm">Your spending overview for this month.</p>
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-serif text-white mb-1">Dashboard</h1>
+          <p className="text-white/40 text-sm">Your spending overview for {selectedMonthLabel}.</p>
+        </div>
+        <label className="flex items-center gap-2 text-white/40 text-xs">
+          View month
+          <select
+            value={selectedMonth}
+            onChange={e => setSelectedMonth(e.target.value)}
+            className="bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm outline-none focus:border-[#C9A24B]"
+            style={{ background: "#0E1525" }}
+          >
+            {monthOptions.map(month => (
+              <option key={month} value={month}>
+                {new Date(`${month}-01T00:00:00`).toLocaleDateString("en-IN", { month: "long", year: "numeric" })}
+              </option>
+            ))}
+          </select>
+        </label>
       </div>
 
       {/* Stat cards */}
       <div className="grid grid-cols-3 gap-4">
-        <StatCard label="This month's spend" value={totalThisMonth} sub={`${monthExpenses.length} transactions`} />
+        <StatCard label={`${selectedMonthLabel} spend`} value={totalSelectedMonth} sub={`${monthExpenses.length} transactions`} />
         <StatCard label="Top category" value={topCategory?.value || 0} sub={topCategory?.name || "No data yet"} />
         <StatCard label="Total tracked" value={totalAll} sub={`${expenses.length} total transactions`} />
       </div>
@@ -163,7 +193,7 @@ export default function DashboardPage() {
 
         {/* Category pie chart */}
         <div className="border border-white/10 rounded-xl p-5 bg-white/[0.02]">
-          <p className="text-white/70 text-sm font-medium mb-3">Spend by Category</p>
+          <p className="text-white/70 text-sm font-medium mb-3">{selectedMonthLabel} Spend by Category</p>
           {pieData.length === 0 ? (
             <div className="h-40 flex items-center justify-center text-white/20 text-sm">Add expenses to see breakdown</div>
           ) : (
@@ -178,6 +208,8 @@ export default function DashboardPage() {
           )}
         </div>
       </div>
+
+      <StatementImport expenses={expenses} onImported={handleImport} isLoading={loading} />
 
       {/* Monthly bar chart */}
       {barData.length > 0 && (
@@ -196,7 +228,7 @@ export default function DashboardPage() {
 
       {/* Expense list */}
       <div className="border border-white/10 rounded-xl p-5 bg-white/[0.02]">
-        <p className="text-white/70 text-sm font-medium mb-3">Recent Transactions</p>
+        <p className="text-white/70 text-sm font-medium mb-3">{selectedMonthLabel} Transactions</p>
         {loading ? (
           <p className="text-white/30 text-sm">Loading...</p>
         ) : expenses.length === 0 ? (

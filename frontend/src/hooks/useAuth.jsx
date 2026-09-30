@@ -19,9 +19,19 @@ export function AuthProvider({ children }) {
     setLoading(false);
   }, []);
 
+  useEffect(() => {
+    function handleSessionExpired() {
+      setUser(null);
+    }
+
+    window.addEventListener("auth:session-expired", handleSessionExpired);
+    return () => window.removeEventListener("auth:session-expired", handleSessionExpired);
+  }, []);
+
   async function login(email, password) {
     const data = await apiLogin(email, password);
     localStorage.setItem("access_token", data.access_token);
+    localStorage.setItem("refresh_token", data.refresh_token);
     localStorage.setItem("user_email", data.email);
     localStorage.setItem("user_name", email.split("@")[0]);
     setUser({ email: data.email, name: email.split("@")[0], token: data.access_token });
@@ -31,6 +41,7 @@ export function AuthProvider({ children }) {
     const data = await apiSignup(email, password, fullName);
     if (data.access_token) {
       localStorage.setItem("access_token", data.access_token);
+      localStorage.setItem("refresh_token", data.refresh_token);
       localStorage.setItem("user_email", data.email);
       localStorage.setItem("user_name", fullName);
       setUser({ email: data.email, name: fullName, token: data.access_token });
@@ -39,7 +50,10 @@ export function AuthProvider({ children }) {
   }
 
   function logout() {
-    localStorage.clear();
+    localStorage.removeItem("access_token");
+    localStorage.removeItem("refresh_token");
+    localStorage.removeItem("user_email");
+    localStorage.removeItem("user_name");
     setUser(null);
   }
 

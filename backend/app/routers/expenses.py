@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from uuid import UUID
 from app.core.auth import get_current_user, supabase_admin
-from app.models.expense import ExpenseCreate, ExpenseOut
+from app.models.expense import ExpenseCreate, ExpenseImport, ExpenseOut
 
 router = APIRouter(prefix="/expenses", tags=["expenses"])
 
@@ -20,6 +20,24 @@ def create_expense(payload: ExpenseCreate, user=Depends(get_current_user)):
     if not result.data:
         raise HTTPException(status_code=400, detail="Could not create expense")
     return result.data[0]
+
+
+@router.post("/import", response_model=list[ExpenseOut])
+def import_expenses(payload: ExpenseImport, user=Depends(get_current_user)):
+    rows = [
+        {
+            "user_id": user.id,
+            "amount": transaction.amount,
+            "category": transaction.category or "Uncategorized",
+            "description": transaction.description,
+            "txn_date": transaction.txn_date.isoformat(),
+        }
+        for transaction in payload.transactions
+    ]
+    result = supabase_admin.table("expenses").insert(rows).execute()
+    if not result.data:
+        raise HTTPException(status_code=400, detail="Could not import expenses")
+    return result.data
 
 
 @router.get("", response_model=list[ExpenseOut])
