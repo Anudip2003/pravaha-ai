@@ -1,13 +1,19 @@
 // src/pages/DashboardPage.jsx
 import { useState, useEffect, useCallback } from "react";
-import { PlusCircle, Trash2, TrendingDown, Wallet, Tag } from "lucide-react";
+import { AlertTriangle, PlusCircle, Trash2, TrendingDown, Wallet, Tag } from "lucide-react";
 import { PieChart, Pie, Cell, Tooltip, BarChart, Bar, XAxis, YAxis, ResponsiveContainer } from "recharts";
-import { apiGetExpenses, apiAddExpense, apiDeleteExpense } from "../api/client";
+import { apiGetExpenses, apiGetFinanceOverview, apiAddExpense, apiDeleteExpense } from "../api/client";
 import { classifyExpense, ALL_CATEGORIES } from "../api/classifier";
 import StatementImport from "../components/StatementImport";
 
 const ACCENT = "#C9A24B";
 const COLORS = ["#C9A24B","#4B8EC9","#4BC975","#C94B7A","#9B4BC9","#C9784B","#4BC9C2","#C9C24B","#4B54C9","#8DC94B","#C94B4B"];
+
+function previousMonthKey(monthKey) {
+  const [year, month] = monthKey.split("-").map(Number);
+  const previous = new Date(year, month - 2, 1);
+  return `${previous.getFullYear()}-${String(previous.getMonth() + 1).padStart(2, "0")}`;
+}
 
 function StatCard({ label, value, sub }) {
   return (
@@ -92,6 +98,7 @@ function AddExpenseForm({ onAdd }) {
 
 export default function DashboardPage() {
   const [expenses, setExpenses] = useState([]);
+  const [financeOverview, setFinanceOverview] = useState(null);
   const [loading, setLoading] = useState(true);
   const currentMonth = new Date().toISOString().slice(0, 7);
   const [selectedMonth, setSelectedMonth] = useState(currentMonth);
@@ -108,6 +115,12 @@ export default function DashboardPage() {
   }, []);
 
   useEffect(() => { fetchExpenses(); }, [fetchExpenses]);
+
+  useEffect(() => {
+    apiGetFinanceOverview()
+      .then(setFinanceOverview)
+      .catch(error => console.error(error));
+  }, []);
 
   function handleAdd(newExpense) {
     setExpenses(prev => [newExpense, ...prev]);
@@ -130,6 +143,15 @@ export default function DashboardPage() {
     .reverse();
   const monthExpenses = expenses.filter(e => e.txn_date?.startsWith(selectedMonth));
   const totalSelectedMonth = monthExpenses.reduce((s, e) => s + Number(e.amount), 0);
+  const previousMonth = previousMonthKey(selectedMonth);
+  const previousMonthLabel = new Date(`${previousMonth}-01T00:00:00`).toLocaleDateString("en-IN", {
+    month: "long",
+    year: "numeric",
+  });
+  const previousMonthExpenses = expenses.filter(e => e.txn_date?.startsWith(previousMonth));
+  const totalPreviousMonth = previousMonthExpenses.reduce((s, e) => s + Number(e.amount), 0);
+  const monthChange = totalSelectedMonth - totalPreviousMonth;
+  const monthChangePercent = totalPreviousMonth > 0 ? (monthChange / totalPreviousMonth) * 100 : null;
   const totalAll = expenses.reduce((s, e) => s + Number(e.amount), 0);
   const selectedMonthLabel = new Date(`${selectedMonth}-01T00:00:00`).toLocaleDateString("en-IN", {
     month: "long",
@@ -155,6 +177,21 @@ export default function DashboardPage() {
   }));
 
   const topCategory = pieData.sort((a, b) => b.value - a.value)[0];
+  const budgetAlerts = Object.entries(financeOverview?.settings?.category_budgets || [])
+    .map(([category, limit]) => {
+      const spent = monthExpenses
+        .filter(expense => expense.category === category)
+        .reduce((sum, expense) => sum + Number(expense.amount), 0);
+      const numericLimit = Number(limit);
+      return {
+        category,
+        limit: numericLimit,
+        spent,
+        percentUsed: numericLimit > 0 ? (spent / numericLimit) * 100 : 0,
+      };
+    })
+    .filter(alert => alert.percentUsed >= 80)
+    .sort((a, b) => b.percentUsed - a.percentUsed);
 
   return (
     <div className="space-y-6">
@@ -186,6 +223,54 @@ export default function DashboardPage() {
         <StatCard label="Top category" value={topCategory?.value || 0} sub={topCategory?.name || "No data yet"} />
         <StatCard label="Total tracked" value={totalAll} sub={`${expenses.length} total transactions`} />
       </div>
+
+      <section className="border border-white/10 rounded-xl p-5 bg-white/[0.02] space-y-4">
+        <div>
+          <h2 className="text-white/80 text-sm font-medium">Monthly comparison</h2>
+          <p className="text-white/35 text-xs mt-1">Compared with {previousMonthLabel}.</p>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <StatCard label={selectedMonthLabel} value={totalSelectedMonth} sub={`${monthExpenses.length} transactions`} />
+          <StatCard label={previousMonthLabel} value={totalPreviousMonth} sub={`${previousMonthExpenses.length} transactions`} />
+          <div className="border border-white/10 rounded-xl p-5 bg-white/[0.02]">
+            <p className="text-white/40 text-xs mb-2">Change</p>
+            <p className={`text-2xl font-serif ${monthChange > 0 ? "text-red-300" : "text-emerald-300"}`}>
+              {monthChange > 0 ? "+" : monthChange < 0 ? "-" : ""}₹{Math.abs(monthChange).toLocaleString("en-IN")}
+            </p>
+            <p className="text-white/30 text-xs mt-1">
+              {monthChangePercent === null
+                ? totalSelectedMonth > 0 ? "New spending" : "No spending change"
+                : `${Math.abs(monthChangePercent).toFixed(1)}% ${monthChange > 0 ? "higher" : monthChange < 0 ? "lower" : "unchanged"}`}
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section className="border border-white/10 rounded-xl p-5 bg-white/[0.02] space-y-3">
+        <div>
+          <h2 className="text-white/80 text-sm font-medium">Budget alerts</h2>
+          <p className="text-white/35 text-xs mt-1">Categories at 80% or more of their saved monthly limit.</p>
+        </div>
+        {budgetAlerts.length === 0 ? (
+          <p className="flex items-center gap-2 text-emerald-300/80 text-sm">
+            <Wallet size={15} /> No budget alerts for {selectedMonthLabel}.
+          </p>
+        ) : (
+          <div className="space-y-2">
+            {budgetAlerts.map(alert => (
+              <div key={alert.category} className="flex flex-wrap items-center justify-between gap-3 border border-amber-300/15 bg-amber-300/5 rounded-lg px-3 py-2">
+                <p className="flex items-center gap-2 text-sm text-amber-200">
+                  <AlertTriangle size={15} />
+                  {alert.category}: ₹{alert.spent.toLocaleString("en-IN")} of ₹{alert.limit.toLocaleString("en-IN")}
+                </p>
+                <span className="text-xs text-amber-200/70">
+                  {alert.percentUsed.toFixed(0)}% used{alert.percentUsed > 100 ? " - over limit" : ""}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
 
       <div className="grid grid-cols-2 gap-6">
         {/* Add expense form */}
