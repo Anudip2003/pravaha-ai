@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { AlertTriangle, Check, RefreshCw, Save, Trash2, TrendingDown, TrendingUp } from "lucide-react";
 import { apiGetFinanceOverview, apiUpdateFinanceSettings } from "../api/client";
-import { ALL_CATEGORIES } from "../api/classifier";
+import { DEFAULT_CATEGORIES, getAllCategories, addCustomCategory, removeCustomCategory } from "../api/classifier";
 
 const ACCENT = "#C9A24B";
 
@@ -44,10 +44,44 @@ function SummaryValue({ label, value, note, warning }) {
 export default function CashFlowPage() {
   const [overview, setOverview] = useState(null);
   const [settings, setSettings] = useState(null);
+  const [categories, setCategories] = useState(() => getAllCategories());
+  const [newCategoryName, setNewCategoryName] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
+
+  function refreshCategories() {
+    setCategories(getAllCategories());
+  }
+
+  function addCategory() {
+    const category = addCustomCategory(newCategoryName);
+    if (!category) {
+      setError("Category must be unique and not blank.");
+      return;
+    }
+    setNewCategoryName("");
+    setError("");
+    refreshCategories();
+  }
+
+  function removeCategory(categoryName) {
+    if (DEFAULT_CATEGORIES.includes(categoryName)) return;
+    if (!removeCustomCategory(categoryName)) return;
+
+    setSettings(current => {
+      if (!current) return current;
+      const nextBudgets = { ...current.category_budgets };
+      delete nextBudgets[categoryName];
+      return {
+        ...current,
+        category_budgets: nextBudgets,
+        recurring_expenses: (current.recurring_expenses || []).filter(bill => bill.category !== categoryName),
+      };
+    });
+    refreshCategories();
+  }
 
   async function loadOverview() {
     setLoading(true);
@@ -180,6 +214,40 @@ export default function CashFlowPage() {
               />
             </label>
 
+            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+              <div className="flex flex-1 gap-2 max-w-md">
+                <input
+                  value={newCategoryName}
+                  onChange={event => setNewCategoryName(event.target.value)}
+                  placeholder="Add custom category"
+                  className="flex-1 bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white placeholder-white/25 outline-none focus:border-[#C9A24B] text-sm"
+                />
+                <button
+                  type="button"
+                  onClick={addCategory}
+                  className="rounded-lg px-3 py-2 text-sm font-medium"
+                  style={{ background: ACCENT, color: "#0E1525" }}
+                >
+                  Add
+                </button>
+              </div>
+              {categories.filter(category => !DEFAULT_CATEGORIES.includes(category)).length > 0 && (
+                <div className="flex flex-wrap gap-2">
+                  {categories.filter(category => !DEFAULT_CATEGORIES.includes(category)).map(category => (
+                    <button
+                      key={category}
+                      type="button"
+                      onClick={() => removeCategory(category)}
+                      className="flex items-center gap-1 rounded-full border border-white/10 bg-white/5 px-2 py-1 text-[10px] text-white/70 hover:border-red-400/40 hover:text-red-300"
+                    >
+                      {category}
+                      <span aria-hidden="true">×</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
             <div className="overflow-x-auto">
               <table className="w-full min-w-[600px] text-left text-xs">
                 <thead className="text-white/40 border-b border-white/10">
@@ -192,7 +260,7 @@ export default function CashFlowPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-white/5">
-                  {ALL_CATEGORIES.map(category => {
+                  {categories.map(category => {
                     const budget = budgetByCategory[category];
                     const progress = budget ? Math.min(budget.percent_used, 100) : 0;
                     return (

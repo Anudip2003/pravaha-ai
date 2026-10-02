@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from uuid import UUID
 from app.core.auth import get_current_user, supabase_admin
-from app.models.expense import ExpenseCreate, ExpenseImport, ExpenseOut
+from app.models.expense import ExpenseCreate, ExpenseImport, ExpenseOut, ExpenseUpdate
 
 router = APIRouter(prefix="/expenses", tags=["expenses"])
 
@@ -50,6 +50,30 @@ def list_expenses(user=Depends(get_current_user)):
         .execute()
     )
     return result.data
+
+
+@router.put("/{expense_id}", response_model=ExpenseOut)
+def update_expense(expense_id: UUID, payload: ExpenseUpdate, user=Depends(get_current_user)):
+    updates = payload.model_dump(exclude_unset=True)
+    if not updates:
+        raise HTTPException(status_code=400, detail="No fields to update")
+
+    for key, value in list(updates.items()):
+        if value is None:
+            continue
+        if key == "txn_date":
+            updates[key] = value.isoformat()
+
+    result = (
+        supabase_admin.table("expenses")
+        .update(updates)
+        .eq("id", str(expense_id))
+        .eq("user_id", user.id)
+        .execute()
+    )
+    if not result.data:
+        raise HTTPException(status_code=404, detail="Expense not found")
+    return result.data[0]
 
 
 @router.delete("/{expense_id}")

@@ -122,6 +122,15 @@ export async function apiImportExpenses(transactions) {
   return readResponse(res, "Failed to import bank statement");
 }
 
+export async function apiUpdateExpense(id, updates) {
+  const res = await authenticatedFetch(`${BASE_URL}/expenses/${id}`, {
+    method: "PUT",
+    headers: authHeaders(),
+    body: JSON.stringify(updates),
+  });
+  return readResponse(res, "Failed to update expense");
+}
+
 export async function apiDeleteExpense(id) {
   const res = await authenticatedFetch(`${BASE_URL}/expenses/${id}`, {
     method: "DELETE",

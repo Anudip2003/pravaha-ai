@@ -11,6 +11,13 @@ class ExpenseCreate(BaseModel):
     txn_date: date
 
 
+class ExpenseUpdate(BaseModel):
+    amount: Optional[float] = Field(default=None, gt=0)
+    category: Optional[str] = None
+    description: Optional[str] = None
+    txn_date: Optional[date] = None
+
+
 class ExpenseOut(BaseModel):
     id: UUID
     user_id: UUID

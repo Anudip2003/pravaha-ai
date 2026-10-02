@@ -2,8 +2,8 @@
 import { useState, useEffect, useCallback } from "react";
 import { AlertTriangle, PlusCircle, Trash2, TrendingDown, Wallet, Tag } from "lucide-react";
 import { PieChart, Pie, Cell, Tooltip, BarChart, Bar, XAxis, YAxis, ResponsiveContainer } from "recharts";
-import { apiGetExpenses, apiGetFinanceOverview, apiAddExpense, apiDeleteExpense } from "../api/client";
-import { classifyExpense, ALL_CATEGORIES } from "../api/classifier";
+import { apiGetExpenses, apiGetFinanceOverview, apiAddExpense, apiUpdateExpense, apiDeleteExpense } from "../api/client";
+import { classifyExpense, DEFAULT_CATEGORIES, getAllCategories, addCustomCategory, removeCustomCategory } from "../api/classifier";
 import StatementImport from "../components/StatementImport";
 
 const ACCENT = "#C9A24B";
@@ -25,21 +25,35 @@ function StatCard({ label, value, sub }) {
   );
 }
 
-function AddExpenseForm({ onAdd }) {
+function AddExpenseForm({ onAdd, categories, onAddCustomCategory, onRemoveCustomCategory }) {
   const today = new Date().toISOString().split("T")[0];
   const [desc, setDesc] = useState("");
   const [amount, setAmount] = useState("");
   const [date, setDate] = useState(today);
   const [category, setCategory] = useState("");
   const [autoCategory, setAutoCategory] = useState("");
+  const [customCategory, setCustomCategory] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+
+  const customCategories = categories.filter(cat => !DEFAULT_CATEGORIES.includes(cat));
 
   function handleDescChange(e) {
     setDesc(e.target.value);
     const auto = classifyExpense(e.target.value);
     setAutoCategory(auto);
     if (!category) setCategory(auto);
+  }
+
+  function handleAddCustomCategory() {
+    const customName = onAddCustomCategory(customCategory);
+    if (!customName) {
+      setError("Category name is missing or already exists.");
+      return;
+    }
+    setCustomCategory("");
+    setCategory(customName);
+    setError("");
   }
 
   async function handleSubmit(e) {
@@ -81,8 +95,36 @@ function AddExpenseForm({ onAdd }) {
       <select value={category} onChange={e => setCategory(e.target.value)}
         className={inputCls + " cursor-pointer"} style={{ background: "#0E1525" }}>
         <option value="">Override category (optional)</option>
-        {ALL_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+        {categories.map(c => <option key={c} value={c}>{c}</option>)}
       </select>
+
+      <div className="flex gap-2">
+        <input
+          value={customCategory}
+          onChange={e => setCustomCategory(e.target.value)}
+          placeholder="Add custom category"
+          className={inputCls}
+        />
+        <button type="button" onClick={handleAddCustomCategory} className="rounded-lg px-3 text-xs font-medium" style={{ background: ACCENT, color: "#0E1525" }}>
+          Add
+        </button>
+      </div>
+
+      {customCategories.length > 0 && (
+        <div className="flex flex-wrap gap-2">
+          {customCategories.map(categoryName => (
+            <button
+              key={categoryName}
+              type="button"
+              onClick={() => onRemoveCustomCategory(categoryName)}
+              className="flex items-center gap-1 rounded-full border border-white/10 bg-white/5 px-2 py-1 text-[10px] text-white/70 hover:border-red-400/40 hover:text-red-300"
+            >
+              {categoryName}
+              <span aria-hidden="true">×</span>
+            </button>
+          ))}
+        </div>
+      )}
 
       {error && <p className="text-red-400 text-xs">{error}</p>}
 
@@ -99,9 +141,29 @@ function AddExpenseForm({ onAdd }) {
 export default function DashboardPage() {
   const [expenses, setExpenses] = useState([]);
   const [financeOverview, setFinanceOverview] = useState(null);
+  const [categories, setCategories] = useState(() => getAllCategories());
   const [loading, setLoading] = useState(true);
   const currentMonth = new Date().toISOString().slice(0, 7);
   const [selectedMonth, setSelectedMonth] = useState(currentMonth);
+
+  function refreshCategories() {
+    setCategories(getAllCategories());
+  }
+
+  function handleAddCustomCategory(name) {
+    const nextCategory = addCustomCategory(name);
+    if (nextCategory) {
+      refreshCategories();
+      return nextCategory;
+    }
+    return null;
+  }
+
+  function handleRemoveCustomCategory(name) {
+    if (removeCustomCategory(name)) {
+      refreshCategories();
+    }
+  }
 
   const fetchExpenses = useCallback(async () => {
     try {
@@ -135,6 +197,19 @@ export default function DashboardPage() {
       await apiDeleteExpense(id);
       setExpenses(prev => prev.filter(e => e.id !== id));
     } catch (e) { console.error(e); }
+  }
+
+  async function handleEditCategory(id, category) {
+    if (!category) return;
+    const current = expenses.find(e => e.id === id);
+    if (!current || current.category === category) return;
+
+    try {
+      const updated = await apiUpdateExpense(id, { category });
+      setExpenses(prev => prev.map(e => (e.id === id ? { ...e, ...updated } : e)));
+    } catch (e) {
+      console.error(e);
+    }
   }
 
   // ── Stats ──────────────────────────────────────────────────────────────────
@@ -274,7 +349,12 @@ export default function DashboardPage() {
 
       <div className="grid grid-cols-2 gap-6">
         {/* Add expense form */}
-        <AddExpenseForm onAdd={handleAdd} />
+        <AddExpenseForm
+          onAdd={handleAdd}
+          categories={categories}
+          onAddCustomCategory={handleAddCustomCategory}
+          onRemoveCustomCategory={handleRemoveCustomCategory}
+        />
 
         {/* Category pie chart */}
         <div className="border border-white/10 rounded-xl p-5 bg-white/[0.02]">
@@ -327,6 +407,17 @@ export default function DashboardPage() {
                   <p className="text-white/30 text-xs">{e.txn_date} · {e.category}</p>
                 </div>
                 <div className="flex items-center gap-3 ml-3">
+                  <select
+                    value={categories.includes(e.category) ? e.category : "Other"}
+                    onChange={event => handleEditCategory(e.id, event.target.value)}
+                    className="bg-white/5 border border-white/10 rounded-md px-2 py-1 text-[11px] text-white outline-none focus:border-[#C9A24B]"
+                    style={{ background: "#0E1525" }}
+                    aria-label={`Category for ${e.description}`}
+                  >
+                    {categories.map(category => (
+                      <option key={category} value={category}>{category}</option>
+                    ))}
+                  </select>
                   <span className="font-medium text-sm" style={{ color: ACCENT }}>₹{Number(e.amount).toLocaleString("en-IN")}</span>
                   <button onClick={() => handleDelete(e.id)} className="text-white/20 hover:text-red-400 transition-colors">
                     <Trash2 size={14} />
